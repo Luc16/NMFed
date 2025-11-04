@@ -1,92 +1,103 @@
 # train_with_torchao.py
+import time
 import torch
 import torch.nn as nn
-import time
 from torchvision.models import resnet18, ResNet18_Weights
 from torchao.sparsity.training import (
     SemiSparseLinear,
     swap_linear_with_semi_sparse_linear,
 )
+from server import server
+
 
 def run_torchao_proof_of_concept():
     """
-    Demonstrates training a model with torchao's dynamic 2:4 sparsity.
+    Proof-of-concept de treino com sparsidade dinâmica 2:4 do torchao.
+    - Em GPUs Ampere+ (cc >= 8.0): troca nn.Linear -> SemiSparseLinear e roda em FP16.
+    - Em CPU (ou GPU < Ampere): pula a troca (treino denso) porque o kernel 2:4 é só CUDA.
     """
     print("--- TorchAO Dynamic Sparse Training Proof of Concept ---")
-    
-    if not (torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 0)):
-        print("\nWARNING: Your GPU does not have CUDA compute capability 8.0+ (Ampere architecture).")
-        print("         `torchao` will function correctly, but you will NOT see a training speedup.")
-        print("         Training will likely be SLOWER than dense training.\n")
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cpu")
+    use_cuda = torch.cuda.is_available()
+    cc = torch.cuda.get_device_capability(0) if use_cuda else (0, 0)
+    has_ampere = use_cuda and (cc >= (8, 0))
 
-    # 1. Load a pre-trained ResNet18 model
+    if not has_ampere:
+        print("\nWARNING:")
+        print("  - Sem GPU Ampere (cc>=8.0) disponível. O kernel 2:4 do torchao só roda em CUDA Ampere+.")
+        print("  - Vou pular a troca para SemiSparseLinear e treinar densamente (sem speedup de sparsidade).\n")
+
+    # Dispositivo e dtype
+    device = torch.device("cuda" if use_cuda else "cpu")
+    # GPU Ampere: FP16; CPU: BF16 é ok p/ testes, mas FP32 é o mais compatível. Vamos usar BF16 aqui.
+    dtype = torch.float16 if has_ampere else torch.bfloat16 if not use_cuda else torch.float32
+
+    # 1) Carrega ResNet18 pré-treinada
     print("Loading pre-trained ResNet18 model...")
     weights = ResNet18_Weights.IMAGENET1K_V1
     model = resnet18(weights=weights)
 
-    # 2. Adapt the model for a 10-class problem
+    # 2) Adapta para problema de 10 classes
     num_ftrs = model.fc.in_features
-    
-    # --- CHANGE 1: Pad the output dimension to be a multiple of 128 ---
-    # The torchao sparse kernel requires dimensions to be multiples of 128.
-    # We change the output from 10 to 128 to meet this requirement.
+
+    # Exigência do kernel 2:4: dimensões múltiplas de 128 na camada Linear.
+    # Em vez de 10, inflamos para 128 e depois "fatiamos" no loss.
     padded_out_features = 128
     model.fc = nn.Linear(num_ftrs, padded_out_features)
-    
-    model.to(device)
-    model.half() 
+
+    # Move para device/dtype desejado
+    model = model.to(device).to(dtype)
     print(f"Model adapted. Final layer output padded to {padded_out_features} features.")
 
-    # 3. Create the config dictionary for the swap function
-    print("\nBuilding config to swap nn.Linear layers...")
-    sparse_config = {}
-    for name, module in model.named_modules():
-        if isinstance(module, nn.Linear):
-            print(f"  - Targeting layer for swap: '{name}'")
-            sparse_config[name] = SemiSparseLinear
-            
-    # 4. Use torchao to swap nn.Linear layers
-    print("Swapping nn.Linear layers with torchao.sparsity.training.SemiSparseLinear...")
-    swap_linear_with_semi_sparse_linear(model, config=sparse_config)
-    
-    print("\nVerification after swap:")
-    for name, module in model.named_modules():
-        if isinstance(module, SemiSparseLinear):
-            print(f"  - Layer '{name}' is now a SemiSparseLinear layer.")
-    
-    # 5. Prepare for training
+    # 3) (Opcional) Troca nn.Linear -> SemiSparseLinear (apenas se houver CUDA Ampere)
+    if has_ampere:
+        print("\nBuilding config to swap nn.Linear layers...")
+        sparse_config = {}
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear):
+                print(f"  - Targeting layer for swap: '{name}'")
+                sparse_config[name] = SemiSparseLinear
+
+        print("Swapping nn.Linear layers with torchao.sparsity.training.SemiSparseLinear...")
+        swap_linear_with_semi_sparse_linear(model, config=sparse_config)
+
+        print("\nVerification after swap:")
+        for name, module in model.named_modules():
+            if isinstance(module, SemiSparseLinear):
+                print(f"  - Layer '{name}' is now a SemiSparseLinear layer.")
+    else:
+        print("\nCPU or non-Ampere GPU detected: skipping SemiSparseLinear swap.")
+
+    # 4) Otimizador / loss
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
     criterion = nn.CrossEntropyLoss()
-    
-    dummy_input = torch.randn(16, 3, 224, 224).to(device).half()
-    dummy_target = torch.randint(0, 10, (16,)).to(device)
 
-    # 6. Run a simple training loop
+    # 5) Dados dummy
+    dummy_input = torch.randn(16, 3, 224, 224, device=device, dtype=dtype)
+    dummy_target = torch.randint(0, 10, (16,), device=device)
+
+    # 6) Treininho rápido
     print("\nStarting a short training loop (5 steps)...")
     model.train()
     start_time = time.time()
     for i in range(5):
         optimizer.zero_grad()
-        
-        # The model now outputs a tensor of shape 
         output = model(dummy_input)
-        
-        # --- CHANGE 2: Slice the output to get only the 10 classes we need ---
-        # We only use the first 10 outputs for our loss calculation.
-        sliced_output = output[:, :10]
-        
+
+        # Saída tem 128; usamos só 10 para o loss
+        sliced_output = output[:, :10].to(torch.float32)  # CrossEntropyLoss espera float32 em geral
         loss = criterion(sliced_output, dummy_target)
+
         loss.backward()
         optimizer.step()
         print(f"  Step {i+1}/5, Loss: {loss.item():.4f}")
     end_time = time.time()
-    
+
     print(f"\nTraining loop completed in {end_time - start_time:.2f} seconds.")
     print("\n--- Proof of Concept Complete ---")
-    print("This demonstrates that a model converted with `torchao` can successfully execute a training loop.")
+    print("O modelo com (ou sem) torchao executou um loop de treino de ponta a ponta.")
+    return model
 
 if __name__ == "__main__":
-    run_torchao_proof_of_concept()
+    model = run_torchao_proof_of_concept()
+    server(model)
