@@ -7,7 +7,6 @@ from torchao.sparsity.training import (
     SemiSparseLinear,
     swap_linear_with_semi_sparse_linear,
 )
-from server import server
 
 
 def run_torchao_proof_of_concept():
@@ -96,8 +95,24 @@ def run_torchao_proof_of_concept():
     print(f"\nTraining loop completed in {end_time - start_time:.2f} seconds.")
     print("\n--- Proof of Concept Complete ---")
     print("O modelo com (ou sem) torchao executou um loop de treino de ponta a ponta.")
-    return model
+    
+    # Return model on CPU for easier saving/loading
+    return model.cpu()
 
 if __name__ == "__main__":
+    # Run the process to get the trained/pruned model
     model = run_torchao_proof_of_concept()
-    server(model)
+    
+    SAVED_MODEL_PATH = "pruned_model.pt"
+    print(f"\nSaving model to {SAVED_MODEL_PATH}...")
+    
+    # Save the entire model object using torch.save
+    # This makes loading easier, but requires the class definitions
+    # (like SemiSparseLinear) to be available in the environment when loading.
+    torch.save(model, SAVED_MODEL_PATH)
+    
+    print(f"Model saved successfully.")
+    print(f"To run the server, you can now create a new script that loads this file and calls server().")
+    
+    # We no longer start the server here
+    # server(model)
