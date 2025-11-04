@@ -67,34 +67,34 @@ def run_torchao_proof_of_concept():
     else:
         print("\nCPU or non-Ampere GPU detected: skipping SemiSparseLinear swap.")
 
-    # 4) Otimizador / loss
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-    criterion = nn.CrossEntropyLoss()
-
-    # 5) Dados dummy
-    dummy_input = torch.randn(16, 3, 224, 224, device=device, dtype=dtype)
-    dummy_target = torch.randint(0, 10, (16,), device=device)
-
-    # 6) Treininho rápido
-    print("\nStarting a short training loop (5 steps)...")
-    model.train()
-    start_time = time.time()
-    for i in range(5):
-        optimizer.zero_grad()
-        output = model(dummy_input)
-
-        # Saída tem 128; usamos só 10 para o loss
-        sliced_output = output[:, :10].to(torch.float32)  # CrossEntropyLoss espera float32 em geral
-        loss = criterion(sliced_output, dummy_target)
-
-        loss.backward()
-        optimizer.step()
-        print(f"  Step {i+1}/5, Loss: {loss.item():.4f}")
-    end_time = time.time()
-
-    print(f"\nTraining loop completed in {end_time - start_time:.2f} seconds.")
-    print("\n--- Proof of Concept Complete ---")
-    print("O modelo com (ou sem) torchao executou um loop de treino de ponta a ponta.")
+    # # 4) Otimizador / loss
+    # optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    # criterion = nn.CrossEntropyLoss()
+    #
+    # # 5) Dados dummy
+    # dummy_input = torch.randn(16, 3, 224, 224, device=device, dtype=dtype)
+    # dummy_target = torch.randint(0, 10, (16,), device=device)
+    #
+    # # 6) Treininho rápido
+    # print("\nStarting a short training loop (5 steps)...")
+    # model.train()
+    # start_time = time.time()
+    # for i in range(5):
+    #     optimizer.zero_grad()
+    #     output = model(dummy_input)
+    #
+    #     # Saída tem 128; usamos só 10 para o loss
+    #     sliced_output = output[:, :10].to(torch.float32)  # CrossEntropyLoss espera float32 em geral
+    #     loss = criterion(sliced_output, dummy_target)
+    #
+    #     loss.backward()
+    #     optimizer.step()
+    #     print(f"  Step {i+1}/5, Loss: {loss.item():.4f}")
+    # end_time = time.time()
+    #
+    # print(f"\nTraining loop completed in {end_time - start_time:.2f} seconds.")
+    # print("\n--- Proof of Concept Complete ---")
+    # print("O modelo com (ou sem) torchao executou um loop de treino de ponta a ponta.")
     
     # Return model on CPU for easier saving/loading
     return model.cpu()
