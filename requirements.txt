@@ -1,5 +1,12 @@
 # install pytorch 2.5, torchvision, torchao, grpc
 
-pip install torch==2.5.0 torchvision==0.16.0 torchao==0.1.0 grpcio==1.56.2 grpcio-tools==1.56.2 numpy pandas scikit-learn
+torch==2.5.0
+torchvision==0.16.0
+torchao==0.1.0
+grpcio==1.56.2
+grpcio-tools==1.56.2
+numpy
+pandas
+scikit-learn
 
 
