@@ -1,6 +1,6 @@
 # install pytorch 2.5, torchvision, torchao, grpc
 
-torch==2.5.0
+torch==2.8.0
 torchvision
 torchao
 grpcio
