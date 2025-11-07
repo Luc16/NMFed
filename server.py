@@ -13,16 +13,21 @@ import comunication_pb2_grpc as rpc
 # reconstruct the model object, even if we don't use them directly.
 import torch.nn as nn
 from torchvision.models import resnet18
-try:
-    from torchao.sparsity.training import SemiSparseLinear
-except ImportError:
-    print("WARNING: torchao library not found.")
-    print("         Loading the model may fail if it uses SemiSparseLinear layers.")
-# --- End Added Imports ---
+# try:
+#     from torchao.sparsity.training import SemiSparseLinear
+# except ImportError:
+#     print("WARNING: torchao library not found.")
+#     print("         Loading the model may fail if it uses SemiSparseLinear layers.")
+# # --- End Added Imports ---
 
 
 # Tamanho do pedaço de bytes enviado por mensagem (2 MB é um valor bom)
 CHUNK_SIZE = 2 * 1024 * 1024
+
+def build_resnet18_padded128():
+    m = resnet18(weights=None)
+    m.fc = nn.Linear(m.fc.in_features, 128)  # mesma FC usada nos clientes
+    return m
 
 def tensor_dtype_str(model):
     """
@@ -51,45 +56,46 @@ def serialize_state_dict_to_path(model, path):
     sd = model.state_dict()
     torch.save(sd, path)
 
+def sha256_bytes(b: bytes) -> str:
+    h = hashlib.sha256(); h.update(b); return h.hexdigest()
+
 class ModelDistributorService(rpc.ModelDistributorServicer):
     def __init__(self, model, arch_name="resnet18"):
         # Set model to eval mode for distribution
         self.model = model.eval()
         self.arch_name = arch_name
+        self.global_version = "1.0.0"
 
     def GetModel(self, request, context):
         # This server serializes the state_dict on-the-fly for each request
         # It does NOT use the pruned_model.pt file directly
-        tmp_path = "/tmp/mode.pt"
-        serialize_state_dict_to_path(self.model, tmp_path)
-
-        total_size = os.path.getsize(tmp_path)
-        sha256 = file_sha256(tmp_path)
+        buf = io.BytesIO()
+        torch.save(self.model.state_dict(), buf)
+        raw = buf.getvalue()
 
         hdr = pb.ModelHeader(
             model_name = request.model_name, # Fixed: use request.model_name
             format =     request.format,
             version =    request.version,
             arch =       self.arch_name,
-            dtype =      tensor_dtype_str(self.model),
-            total_size = total_size,
-            sha256 =     sha256,
+            total_size = len(raw),
+            sha256 =     sha256_bytes(raw),
         )
         yield pb.ModelStream(header=hdr)
 
-        try:
-            with open(tmp_path, "rb") as f:
-                while True:
-                    data = f.read(CHUNK_SIZE)
-                    if not data:
-                        break
-                    yield pb.ModelStream(chunk=pb.ModelChunk(data=data))
-        finally:
-            # Clean up the temporary file after streaming
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+        for i in range(0, len(raw), CHUNK_SIZE):
+            yield pb.ModelStream(chunk=pb.ModelChunk(data=raw[i:i+CHUNK_SIZE]))
 
-
+    def SubmitUpdate(self, request, context):
+        print(f"[SubmitUpdate] from={request.client_id} "
+              f"bytes={len(request.state_bytes)} samples={request.num_samples} "
+              f"base_version={request.base_version}")
+        # apenas confirma recebimento; sem FedAvg por enquanto
+        return pb.ModelUpdateAck(
+            ok=True,
+            server_version=self.global_version,
+            msg="received (no aggregation yet)"
+        )
 # The 'server(model)' function has been replaced by the main block below
 if __name__ == "__main__":
     SAVED_MODEL_PATH = "pruned_model.pt"
@@ -99,17 +105,13 @@ if __name__ == "__main__":
         print("Please run 'prune_server_model.py' first to generate the model file.")
     else:
         print(f"Loading model from {SAVED_MODEL_PATH}...")
-        
-        # Load the model onto the CPU first
-        # torch.load needs the class definitions (like SemiSparseLinear)
-        # to be imported in this script to work.
-        model = torch.load(SAVED_MODEL_PATH, map_location=torch.device('cpu'))
-        
-        # Determine device and move model there
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = model.to(device)
+        model = build_resnet18_padded128().to(device)
         print(f"Model loaded successfully and moved to {device}.")
-
+        
+        sd = torch.load(SAVED_MODEL_PATH, map_location="cpu")
+        model.load_state_dict(sd, strict=True)
+        
         # Start the gRPC server
         grpc_server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
 

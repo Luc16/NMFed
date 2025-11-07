@@ -109,7 +109,7 @@ if __name__ == "__main__":
     # Save the entire model object using torch.save
     # This makes loading easier, but requires the class definitions
     # (like SemiSparseLinear) to be available in the environment when loading.
-    torch.save(model, SAVED_MODEL_PATH)
+    torch.save(model.state_dict(), SAVED_MODEL_PATH)
     
     print(f"Model saved successfully.")
     print(f"To run the server, you can now create a new script that loads this file and calls server().")

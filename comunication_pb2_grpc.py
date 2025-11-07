@@ -35,9 +35,14 @@ class ModelDistributorStub(object):
             channel: A grpc.Channel.
         """
         self.GetModel = channel.unary_stream(
-                '/modeldist.ModelDistributor/GetModel',
+                '/comunication.ModelDistributor/GetModel',
                 request_serializer=comunication__pb2.ModelRequest.SerializeToString,
                 response_deserializer=comunication__pb2.ModelStream.FromString,
+                _registered_method=True)
+        self.SubmitUpdate = channel.unary_unary(
+                '/comunication.ModelDistributor/SubmitUpdate',
+                request_serializer=comunication__pb2.ModelUpdateRequest.SerializeToString,
+                response_deserializer=comunication__pb2.ModelUpdateAck.FromString,
                 _registered_method=True)
 
 
@@ -45,6 +50,12 @@ class ModelDistributorServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetModel(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SubmitUpdate(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -58,11 +69,16 @@ def add_ModelDistributorServicer_to_server(servicer, server):
                     request_deserializer=comunication__pb2.ModelRequest.FromString,
                     response_serializer=comunication__pb2.ModelStream.SerializeToString,
             ),
+            'SubmitUpdate': grpc.unary_unary_rpc_method_handler(
+                    servicer.SubmitUpdate,
+                    request_deserializer=comunication__pb2.ModelUpdateRequest.FromString,
+                    response_serializer=comunication__pb2.ModelUpdateAck.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'modeldist.ModelDistributor', rpc_method_handlers)
+            'comunication.ModelDistributor', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('modeldist.ModelDistributor', rpc_method_handlers)
+    server.add_registered_method_handlers('comunication.ModelDistributor', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -83,9 +99,36 @@ class ModelDistributor(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/modeldist.ModelDistributor/GetModel',
+            '/comunication.ModelDistributor/GetModel',
             comunication__pb2.ModelRequest.SerializeToString,
             comunication__pb2.ModelStream.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SubmitUpdate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/comunication.ModelDistributor/SubmitUpdate',
+            comunication__pb2.ModelUpdateRequest.SerializeToString,
+            comunication__pb2.ModelUpdateAck.FromString,
             options,
             channel_credentials,
             insecure,

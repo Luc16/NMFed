@@ -24,23 +24,25 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12\x63omunication.proto\x12\tmodeldist\"[\n\x0cModelRequest\x12\x12\n\nmodel_name\x18\x01 \x01(\t\x12&\n\x06\x66ormat\x18\x02 \x01(\x0e\x32\x16.modeldist.ModelFormat\x12\x0f\n\x07version\x18\x03 \x01(\t\"\x1a\n\nModelChunk\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\"\x9b\x01\n\x0bModelHeader\x12\x12\n\nmodel_name\x18\x01 \x01(\t\x12&\n\x06\x66ormat\x18\x02 \x01(\x0e\x32\x16.modeldist.ModelFormat\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x0c\n\x04\x61rch\x18\x04 \x01(\t\x12\r\n\x05\x64type\x18\x05 \x01(\t\x12\x12\n\ntotal_size\x18\x06 \x01(\x04\x12\x0e\n\x06sha256\x18\x07 \x01(\t\"g\n\x0bModelStream\x12(\n\x06header\x18\x01 \x01(\x0b\x32\x16.modeldist.ModelHeaderH\x00\x12&\n\x05\x63hunk\x18\x02 \x01(\x0b\x32\x15.modeldist.ModelChunkH\x00\x42\x06\n\x04part*8\n\x0bModelFormat\x12\x0e\n\nSTATE_DICT\x10\x00\x12\x0f\n\x0bTORCHSCRIPT\x10\x01\x12\x08\n\x04ONNX\x10\x02\x32Q\n\x10ModelDistributor\x12=\n\x08GetModel\x12\x17.modeldist.ModelRequest\x1a\x16.modeldist.ModelStream0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12\x63omunication.proto\x12\x0c\x63omunication\"-\n\x0cModelRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\"\x1a\n\nModelChunk\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\"d\n\x0bModelHeader\x12\x12\n\nmodel_name\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\x12\x0c\n\x04\x61rch\x18\x03 \x01(\t\x12\x12\n\ntotal_size\x18\x04 \x01(\x04\x12\x0e\n\x06sha256\x18\x05 \x01(\t\"m\n\x0bModelStream\x12+\n\x06header\x18\x01 \x01(\x0b\x32\x19.comunication.ModelHeaderH\x00\x12)\n\x05\x63hunk\x18\x02 \x01(\x0b\x32\x18.comunication.ModelChunkH\x00\x42\x06\n\x04part\"g\n\x12ModelUpdateRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x13\n\x0bnum_samples\x18\x02 \x01(\x04\x12\x13\n\x0bstate_bytes\x18\x03 \x01(\x0c\x12\x14\n\x0c\x62\x61se_version\x18\x04 \x01(\t\"A\n\x0eModelUpdateAck\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x16\n\x0eserver_version\x18\x02 \x01(\t\x12\x0b\n\x03msg\x18\x03 \x01(\t2\xa7\x01\n\x10ModelDistributor\x12\x43\n\x08GetModel\x12\x1a.comunication.ModelRequest\x1a\x19.comunication.ModelStream0\x01\x12N\n\x0cSubmitUpdate\x12 .comunication.ModelUpdateRequest\x1a\x1c.comunication.ModelUpdateAckb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'comunication_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_MODELFORMAT']._serialized_start=417
-  _globals['_MODELFORMAT']._serialized_end=473
-  _globals['_MODELREQUEST']._serialized_start=33
-  _globals['_MODELREQUEST']._serialized_end=124
-  _globals['_MODELCHUNK']._serialized_start=126
-  _globals['_MODELCHUNK']._serialized_end=152
-  _globals['_MODELHEADER']._serialized_start=155
-  _globals['_MODELHEADER']._serialized_end=310
-  _globals['_MODELSTREAM']._serialized_start=312
-  _globals['_MODELSTREAM']._serialized_end=415
-  _globals['_MODELDISTRIBUTOR']._serialized_start=475
-  _globals['_MODELDISTRIBUTOR']._serialized_end=556
+  _globals['_MODELREQUEST']._serialized_start=36
+  _globals['_MODELREQUEST']._serialized_end=81
+  _globals['_MODELCHUNK']._serialized_start=83
+  _globals['_MODELCHUNK']._serialized_end=109
+  _globals['_MODELHEADER']._serialized_start=111
+  _globals['_MODELHEADER']._serialized_end=211
+  _globals['_MODELSTREAM']._serialized_start=213
+  _globals['_MODELSTREAM']._serialized_end=322
+  _globals['_MODELUPDATEREQUEST']._serialized_start=324
+  _globals['_MODELUPDATEREQUEST']._serialized_end=427
+  _globals['_MODELUPDATEACK']._serialized_start=429
+  _globals['_MODELUPDATEACK']._serialized_end=494
+  _globals['_MODELDISTRIBUTOR']._serialized_start=497
+  _globals['_MODELDISTRIBUTOR']._serialized_end=664
 # @@protoc_insertion_point(module_scope)
