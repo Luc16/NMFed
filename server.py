@@ -67,23 +67,35 @@ class ModelDistributorService(rpc.ModelDistributorServicer):
         self.global_version = "1.0.0"
 
     def GetModel(self, request, context):
-        # This server serializes the state_dict on-the-fly for each request
-        # It does NOT use the pruned_model.pt file directly
-        buf = io.BytesIO()
-        torch.save(self.model.state_dict(), buf)
-        raw = buf.getvalue()
+        try:
+            print(f"[GetModel] pedido de {request.name}")
+            buf = io.BytesIO()
+            torch.save(self.model.state_dict(), buf)
+            raw = buf.getvalue()
+            print(f"[GetModel] state_dict serializado: {len(raw)} bytes")
 
-        hdr = pb.ModelHeader(
-            model_name = request.name, # Fixed: use request.model_name
-            version =    self.global_version,
-            arch =       self.arch_name,
-            total_size = len(raw),
-            sha256 =     sha256_bytes(raw),
-        )
-        yield pb.ModelStream(header=hdr)
+            hdr = pb.ModelHeader(
+                model_name = request.name,
+                version    = self.global_version,
+                arch       = self.arch_name,
+                total_size = len(raw),
+                sha256     = sha256_bytes(raw),
+            )
+            print("[GetModel] enviando header…")
+            yield pb.ModelStream(header=hdr)
 
-        for i in range(0, len(raw), CHUNK_SIZE):
-            yield pb.ModelStream(chunk=pb.ModelChunk(data=raw[i:i+CHUNK_SIZE]))
+            sent = 0
+            for i in range(0, len(raw), CHUNK_SIZE):
+                chunk = raw[i:i+CHUNK_SIZE]
+                sent += len(chunk)
+                if i == 0 or sent == len(raw) or sent % (10*1024*1024) == 0:
+                    print(f"[GetModel] enviando… {sent}/{len(raw)} bytes")
+                yield pb.ModelStream(chunk=pb.ModelChunk(data=chunk))
+
+            print("[GetModel] stream concluída")
+        except Exception as e:
+            print(f"[GetModel] ERRO: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, f"GetModel failed: {e}")
 
     def SubmitUpdate(self, request, context):
         print(f"[SubmitUpdate] from={request.client_id} "
