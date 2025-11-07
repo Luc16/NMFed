@@ -75,8 +75,7 @@ class ModelDistributorService(rpc.ModelDistributorServicer):
 
         hdr = pb.ModelHeader(
             model_name = request.name, # Fixed: use request.model_name
-            format =     request.global_version,
-            version =    request.version,
+            version =    self.global_version,
             arch =       self.arch_name,
             total_size = len(raw),
             sha256 =     sha256_bytes(raw),
