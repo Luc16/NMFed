@@ -74,8 +74,8 @@ class ModelDistributorService(rpc.ModelDistributorServicer):
         raw = buf.getvalue()
 
         hdr = pb.ModelHeader(
-            model_name = request.model_name, # Fixed: use request.model_name
-            format =     request.format,
+            model_name = request.name, # Fixed: use request.model_name
+            format =     request.global_version,
             version =    request.version,
             arch =       self.arch_name,
             total_size = len(raw),
