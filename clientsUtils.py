@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torchvision.models import resnet18
+from torch.utils.data import DataLoader
 
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR10_STD  = (0.2023, 0.1994, 0.2010)
@@ -13,28 +14,28 @@ def build_resnet18_padded128():
     m.fc = nn.Linear(m.fc.in_features, 128) # padding p/ sparsidade 2:4
     return m
 
-def make_cifar10_loaders(data_dir: str, batch_size: int, num_workers: int = 2):
-    train_tf = transforms.Compose([
+def make_cifar10_loaders(data_dir, batch_size):
+    tfm_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
-        transforms.Resize(224),             # adapta CIFAR (32x32) para ResNet18 (224x224)
         transforms.ToTensor(),
-        transforms.Normalize(CIFAR10_MEAN, CIFAR10_STD),
     ])
-    test_tf = transforms.Compose([
-        transforms.Resize(224),
-        transforms.ToTensor(),
-        transforms.Normalize(CIFAR10_MEAN, CIFAR10_STD),
-    ])
-    train_ds = datasets.CIFAR10(root=data_dir, train=True, download=True,  transform=train_tf)
-    val_ds   = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=test_tf)
-    train_loader = torch.utils.data.DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True
+    tfm_val = transforms.ToTensor()
+
+    train_set = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=tfm_train)
+    val_set   = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=tfm_val)
+
+    loader_args = dict(
+        batch_size=batch_size,
+        num_workers=0,            # <- evita multi-process no Windows/Ray
+        pin_memory=False,         # <- desnecessário sem GPU
+        persistent_workers=False, # <- garante que não fica preso
     )
-    val_loader = torch.utils.data.DataLoader(
-        val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True
-    )
+
+    train_loader = DataLoader(train_set, shuffle=True,  **loader_args)
+    val_loader   = DataLoader(val_set,   shuffle=False, **loader_args)
     return train_loader, val_loader
+
 
 
 def sha256_bytes(b: bytes) -> str:
@@ -62,25 +63,26 @@ def evaluate_top1(model: nn.Module, loader, device="cpu"):
     return correct / max(1, total)
 
 def train_locally(model: nn.Module, train_loader, steps: int = 200, device="cpu"):
-    model.to(device).train()
-    opt  = optim.SGD(model.parameters(), lr=0.05, momentum=0.9, weight_decay=5e-4)
-    sched = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps)
-    crit = nn.CrossEntropyLoss()
+    model.to(device)
+    model.train()
+    opt = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+    crit = torch.nn.CrossEntropyLoss()
     seen = 0
     it = iter(train_loader)
-    for _ in range(steps):
+    print("Entrou aqui")
+    for i in range(steps):
+        print("quem sabe")
         try:
             x, y = next(it)
         except StopIteration:
             it = iter(train_loader)
             x, y = next(it)
-        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-        opt.zero_grad(set_to_none=True)
-        logits = model(x)[:, :10].float()
-        loss = crit(logits, y)
+        x, y = x.to(device), y.to(device)
+        opt.zero_grad()
+        loss = crit(model(x), y)
         loss.backward()
         opt.step()
-        sched.step()
         seen += x.size(0)
-    model.eval()
+        if (i+1) % 20 == 0:
+            print(f"[train] step {i+1}/{steps} loss={loss.item():.4f} seen={seen}")
     return model, seen

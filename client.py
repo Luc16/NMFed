@@ -14,16 +14,30 @@ from clientsUtils import (
     train_locally, evaluate_top1,
 )
 
-def fetch_model(host: str):
-    with grpc.insecure_channel(host) as ch:
-        stub = rpc.ModelDistributorStub(ch)
-        header, buf = None, bytearray()
-        for part in stub.GetModel(ModelRequest(name="resnet18-ibn-v1", version="any")):
-            which = part.WhichOneof("part")
-            if which == "header": header = part.header
-            else:                 buf.extend(part.chunk.data)
-        if header is None: raise RuntimeError("no header")
-        return header, bytes(buf)
+def fetch_model(host: str, timeout_s: float = 300.0):
+    print(f"[client] conectando a {host}…")
+    ch = grpc.insecure_channel(host)
+    grpc.channel_ready_future(ch).result(timeout=timeout_s)
+    print("[client] canal pronto, requisitando modelo…")
+
+    stub = rpc.ModelDistributorStub(ch)
+    header, buf = None, bytearray()
+    total = None
+
+    for part in stub.GetModel(ModelRequest(name="resnet18-ibn-v1", version="any"), timeout=timeout_s):
+        which = part.WhichOneof("part")
+        if which == "header":
+            header = part.header
+            total = header.total_size
+            print(f"[client] header: version={header.version} arch={header.arch} size={total} sha256={header.sha256[:12]}…")
+        else:
+            buf.extend(part.chunk.data)
+            if total and (len(buf)==total or len(buf) % (10*1024*1024) == 0):
+                print(f"[client] recebido {len(buf)}/{total} bytes ({100*len(buf)/total:.1f}%)")
+    if header is None:
+        raise RuntimeError("no header")
+    print("[client] download OK")
+    return header, bytes(buf)
 
 @ray.remote
 class Client:
@@ -45,6 +59,8 @@ class Client:
 
         # 2) reconstrói e carrega pesos
         model = build_resnet18_padded128()
+        print("Ola")
+
         model.load_state_dict(bytes_to_sd(raw, device="cpu"), strict=True)
 
         # 3) avalia antes
@@ -56,8 +72,16 @@ class Client:
         # 5) avalia depois (opcional)
         acc_after = evaluate_top1(model, self.val_loader, device=self.device)
 
+        print("Oi")
+
         # 6) envia update com base_version
-        with grpc.insecure_channel(self.server_host) as ch:
+        with grpc.insecure_channel(
+            self.server_host,
+            options=[
+                ("grpc.max_receive_message_length", 128 * 1024 * 1024),
+                ("grpc.max_send_message_length",    128 * 1024 * 1024),
+            ],
+        ) as ch:
             stub = rpc.ModelDistributorStub(ch)
             ack = stub.SubmitUpdate(ModelUpdateRequest(
                 client_id=self.client_id,

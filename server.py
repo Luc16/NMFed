@@ -228,8 +228,13 @@ if __name__ == "__main__":
         model.load_state_dict(sd, strict=True)
         
         # Start the gRPC server
-        grpc_server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
-
+        grpc_server = grpc.server(
+            futures.ThreadPoolExecutor(max_workers=8),
+            options=[
+                ("grpc.max_receive_message_length", 128 * 1024 * 1024),  # 128 MB
+                ("grpc.max_send_message_length",    128 * 1024 * 1024),
+            ],
+        )
         rpc.add_ModelDistributorServicer_to_server(
             ModelDistributorService(model), grpc_server
         )
