@@ -52,8 +52,13 @@ class Client:
         self.train_loader, self.val_loader = make_cifar10_loaders(self.data_dir, self.batch_size)
 
     def one_round(self):
-        # 1) baixa modelo global
+        t_fetch0 = time.time()
         header, raw = fetch_model(self.server_host)
+
+        t_fetch1 = time.time()
+        download_time_s = t_fetch1 - t_fetch0
+        model_bytes_download = len(raw)        
+
         if sha256_bytes(raw) != header.sha256:
             return {"client": self.client_id, "ok": False, "msg": "checksum mismatch"}
 
@@ -67,12 +72,19 @@ class Client:
         acc_before = evaluate_top1(model, self.val_loader, device=self.device)
 
         # 4) fine-tune local com CIFAR-10
+        t_train0 = time.time()
         model, seen = train_locally(model, self.train_loader, steps=self.steps, device=self.device)
+        t_train1 = time.time()
+        train_time_s = t_train1 - t_train0
+        steps_per_s = (self.steps / train_time_s) if train_time_s > 0 else float("inf")
+        samples_per_s = (seen / train_time_s) if train_time_s > 0 else float("inf")
 
         # 5) avalia depois (opcional)
         acc_after = evaluate_top1(model, self.val_loader, device=self.device)
 
-        print("Oi")
+        update_bytes_blob = sd_to_bytes(model.state_dict())
+        update_bytes_size = len(update_bytes_blob)
+        t_up0 = time.time()
 
         # 6) envia update com base_version
         with grpc.insecure_channel(
@@ -86,9 +98,11 @@ class Client:
             ack = stub.SubmitUpdate(ModelUpdateRequest(
                 client_id=self.client_id,
                 num_samples=seen,
-                state_bytes=sd_to_bytes(model.state_dict()),
+                state_bytes=update_bytes_blob,
                 base_version=header.version,
             ))
+        t_up1 = time.time()
+        upload_time_s = t_up1 - t_up0
 
         return {
             "client": self.client_id,
@@ -98,6 +112,13 @@ class Client:
             "seen": int(seen),
             "acc_before": float(acc_before),
             "acc_after": float(acc_after),
+            "model_bytes_download": int(model_bytes_download),
+            "download_time_s": float(download_time_s),
+            "update_bytes_upload": int(update_bytes_size),
+            "upload_time_s": float(upload_time_s),
+            "train_time_s": float(train_time_s),
+            "steps_per_s": float(steps_per_s),
+            "samples_per_s": float(samples_per_s),
         }
 
 def main():

@@ -95,8 +95,8 @@ class ModelDistributorService(rpc.ModelDistributorServicer):
     def GetModel(self, request, context):
         try:
             print(f"[GetModel] pedido de {request.name}")
-            buf = io.BytesIO()
-            raw = sd_to_bytes(global_state)  # usa o modelo agregado
+            
+            raw = sd_to_bytes(global_state)
 
             print(f"[GetModel] state_dict serializado: {len(raw)} bytes")
 
@@ -181,7 +181,7 @@ class ModelDistributorService(rpc.ModelDistributorServicer):
             print(f"[SubmitUpdate] from={request.client_id} "
                   f"bytes={len(request.state_bytes)} samples={request.num_samples} "
                   f"base_version={getattr(request, 'base_version', '?')}")
-
+            print(f"[METRICS] update_bytes_recv={len(request.state_bytes)}")
             # NEW: recuperar state_dict do update
             sd = bytes_to_sd(request.state_bytes, device=DEVICE)
             weight = int(request.num_samples) if request.num_samples > 0 else 1
@@ -195,11 +195,11 @@ class ModelDistributorService(rpc.ModelDistributorServicer):
                     new_sd = fedavg(pending_updates)
                     global_state = new_sd
                     self.model.load_state_dict(global_state, strict=True)
-                    test_global_model(global_state, device=DEVICE)
-
+                    ok = test_global_model(global_state, device=DEVICE)
                     global_version += 1
                     pending_updates.clear()
                     print(f"[server] nova versão global: {global_version}")
+                    print(f"[METRICS] global_version={global_version} model_bytes={len(sd_to_bytes(global_state))}")
 
             return pb.ModelUpdateAck(
                 ok=True,
