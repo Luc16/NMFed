@@ -1,0 +1,12 @@
+[client] conectando a 127.0.0.1:50051…
+[client] canal pronto, requisitando modelo…
+[client] header: version=1 arch=resnet18 size=22541387 sha256=70ce4aec66fb…
+[client] recebido 10485760/22541387 bytes (46.5%)
+[client] recebido 20971520/22541387 bytes (93.0%)
+[client] recebido 22541387/22541387 bytes (100.0%)
+[client] download OK
+[client] fc -> SemiSparseLinear (device: cuda:0 , dtype: torch.bfloat16 )
+[dbg] model device=cuda:0 dtype=torch.bfloat16
+[client client-1] acc_before=0.4382
+[client client-1] epoch 1/1 steps_this=200 seen_ep=25600 acc=0.4022
+[client client-1] acc_after=0.4022

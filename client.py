@@ -16,7 +16,7 @@ from clientsUtils import (
     train_locally, evaluate_top1,
 )
 
-# ------------------ util de log ------------------
+# ------------------ util de WWlog ------------------
 class Tee:
     def __init__(self, *files): self.files = files
     def write(self, data):
@@ -26,7 +26,7 @@ class Tee:
         for f in self.files: f.flush()
 
 def make_log_path(client_id: str, round_idx: int = 0):
-    LOG_DIR = "logs_server"
+    LOG_DIR = "logs_server_pruned"
     os.makedirs(LOG_DIR, exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     fname = f"log_client_{client_id}_round{round_idx}_{ts}.txt"

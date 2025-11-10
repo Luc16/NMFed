@@ -213,7 +213,7 @@ class ModelDistributorService(rpc.ModelDistributorServicer):
 
 # The 'server(model)' function has been replaced by the main block below
 if __name__ == "__main__":
-    SAVED_MODEL_PATH = "baseline_model.pt"
+    SAVED_MODEL_PATH = "pruned_model.pt"
     
     if not os.path.exists(SAVED_MODEL_PATH):
         print(f"Error: Model file not found at {SAVED_MODEL_PATH}")
