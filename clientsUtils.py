@@ -6,12 +6,47 @@ from torchvision import datasets, transforms
 from torchvision.models import resnet18
 from torch.utils.data import DataLoader
 
+from torchao.sparsity.training import (
+    SemiSparseLinear,
+    swap_linear_with_semi_sparse_linear,
+)
+
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR10_STD  = (0.2023, 0.1994, 0.2010)
 
 def build_resnet18_padded128():
+    """
+    Constrói uma ResNet-18 com camada final de 128-dimensões.
+    Se uma GPU Ampere+ (cc >= 8.0) estiver disponível, troca automaticamente
+    as camadas nn.Linear por SemiSparseLinear (2:4) do torchao.
+    """
+    
+    # 1. Verifica o hardware (lógica copiada de prune_server_model.py)
+    use_cuda = torch.cuda.is_available()
+    cc = torch.cuda.get_device_capability(0) if use_cuda else (0, 0)
+    has_ampere = use_cuda and (cc >= (8, 0))
+
+    if not has_ampere:
+        print("\n[Client WARNING]")
+        print("  - Cliente sem GPU Ampere (cc>=8.0). O kernel 2:4 do torchao é apenas CUDA Ampere+.")
+        print("  - O treinamento local será feito de forma DENSA (nn.Linear padrão).\n")
+
+    # 2. Constrói a arquitetura base
     m = resnet18(weights=None)              # sem pré-treino
     m.fc = nn.Linear(m.fc.in_features, 128) # padding p/ sparsidade 2:4
+
+    # 3. (Condicional) Troca nn.Linear -> SemiSparseLinear
+    if has_ampere:
+        print("\n[Client] GPU Ampere detectada. Trocando nn.Linear por SemiSparseLinear...")
+        sparse_config = {}
+        for name, module in m.named_modules():
+            if isinstance(module, nn.Linear):
+                print(f"  - Alvo para troca: '{name}'")
+                sparse_config[name] = SemiSparseLinear
+
+        swap_linear_with_semi_sparse_linear(m, config=sparse_config)
+        print("[Client] Troca de camadas concluída.")
+    
     return m
 
 def make_cifar10_loaders(data_dir, batch_size):
@@ -69,9 +104,7 @@ def train_locally(model: nn.Module, train_loader, steps: int = 200, device="cpu"
     crit = torch.nn.CrossEntropyLoss()
     seen = 0
     it = iter(train_loader)
-    print("Entrou aqui")
     for i in range(steps):
-        print("quem sabe")
         try:
             x, y = next(it)
         except StopIteration:
