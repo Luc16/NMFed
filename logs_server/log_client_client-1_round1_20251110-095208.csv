@@ -1,0 +1,2 @@
+epoch, steps_this, seen_ep, acc, epoch_time
+1, 20, 640,  0.166800, 24.739015

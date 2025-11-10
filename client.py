@@ -24,10 +24,13 @@ class Tee:
             f.flush()
 
 def make_log_path(client_id: str, round_idx: int = 0):
+    LOG_DIR = "logs_server"
+    os.makedirs(LOG_DIR, exist_ok=True)
+
     ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     fname = f"log_client_{client_id}_round{round_idx}_{ts}.txt"
     # grava no diretório atual; mude se quiser um subdir:
-    return os.path.join(os.getcwd(), fname)
+    return os.path.join(os.getcwd(), LOG_DIR, fname)
 
 from clientsUtils import (
     build_resnet18_padded128, make_cifar10_loaders,
