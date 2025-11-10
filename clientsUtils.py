@@ -1,80 +1,81 @@
-import io, hashlib
+# clientsUtils.py
+import io
+import hashlib
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch import amp
 from torchvision import datasets, transforms
 from torchvision.models import resnet18
 from torch.utils.data import DataLoader
 
-from torchao.sparsity.training import (
-    SemiSparseLinear,
-    swap_linear_with_semi_sparse_linear,
-)
-
+# ------------------------------------------------------------
+# CIFAR-10 stats
+# ------------------------------------------------------------
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR10_STD  = (0.2023, 0.1994, 0.2010)
 
+# ------------------------------------------------------------
+# Modelo base: ResNet-18 com saída 128 (padded)
+# (A troca para SemiSparseLinear é feita no client.py)
+# ------------------------------------------------------------
 def build_resnet18_padded128():
     """
-    Constrói uma ResNet-18 com camada final de 128-dimensões.
-    Se uma GPU Ampere+ (cc >= 8.0) estiver disponível, troca automaticamente
-    as camadas nn.Linear por SemiSparseLinear (2:4) do torchao.
+    Constrói uma ResNet-18 sem pesos pré-treinados e troca a fc para 128 saídas.
+    OBS: NÃO faz swap para SemiSparseLinear aqui — isso é feito no client.py,
+    já no device/dtype correto, para evitar incompatibilidades de versão do torchao.
     """
-    
-    # 1. Verifica o hardware (lógica copiada de prune_server_model.py)
-    use_cuda = torch.cuda.is_available()
-    cc = torch.cuda.get_device_capability(0) if use_cuda else (0, 0)
-    has_ampere = use_cuda and (cc >= (8, 0))
-
-    if not has_ampere:
-        print("\n[Client WARNING]")
-        print("  - Cliente sem GPU Ampere (cc>=8.0). O kernel 2:4 do torchao é apenas CUDA Ampere+.")
-        print("  - O treinamento local será feito de forma DENSA (nn.Linear padrão).\n")
-
-    # 2. Constrói a arquitetura base
-    m = resnet18(weights=None)              # sem pré-treino
-    m.fc = nn.Linear(m.fc.in_features, 128) # padding p/ sparsidade 2:4
-
-    # 3. (Condicional) Troca nn.Linear -> SemiSparseLinear
-    if has_ampere:
-        print("\n[Client] GPU Ampere detectada. Trocando nn.Linear por SemiSparseLinear...")
-        sparse_config = {}
-        for name, module in m.named_modules():
-            if isinstance(module, nn.Linear):
-                print(f"  - Alvo para troca: '{name}'")
-                sparse_config[name] = SemiSparseLinear
-
-        swap_linear_with_semi_sparse_linear(m, config=sparse_config)
-        print("[Client] Troca de camadas concluída.")
-    
+    m = resnet18(weights=None)               # sem pré-treino (pesos vêm do servidor)
+    m.fc = nn.Linear(m.fc.in_features, 128)  # saída "padded" 128 (CIFAR-10 usa [:10])
     return m
 
+# ------------------------------------------------------------
+# DataLoaders de CIFAR-10
+# ------------------------------------------------------------
 def make_cifar10_loaders(data_dir, batch_size):
     tfm_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
+        transforms.Normalize(CIFAR10_MEAN, CIFAR10_STD),
     ])
-    tfm_val = transforms.ToTensor()
+    tfm_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR10_MEAN, CIFAR10_STD),
+    ])
 
-    train_set = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=tfm_train)
+    train_set = datasets.CIFAR10(root=data_dir, train=True,  download=True, transform=tfm_train)
     val_set   = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=tfm_val)
 
+    # Heurística simples para acelerar quando há GPU
+    use_cuda = torch.cuda.is_available()
     loader_args = dict(
         batch_size=batch_size,
-        num_workers=0,            # <- evita multi-process no Windows/Ray
-        pin_memory=False,         # <- desnecessário sem GPU
-        persistent_workers=False, # <- garante que não fica preso
+        shuffle=True,
+        num_workers=(2 if use_cuda else 0),
+        pin_memory=use_cuda,
+        persistent_workers=(True if use_cuda and 2 > 0 else False),
     )
+    train_loader = DataLoader(train_set, **loader_args)
 
-    train_loader = DataLoader(train_set, shuffle=True,  **loader_args)
-    val_loader   = DataLoader(val_set,   shuffle=False, **loader_args)
+    loader_args_val = dict(
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=(2 if use_cuda else 0),
+        pin_memory=use_cuda,
+        persistent_workers=(True if use_cuda and 2 > 0 else False),
+    )
+    val_loader = DataLoader(val_set, **loader_args_val)
+
     return train_loader, val_loader
 
-
-
+# ------------------------------------------------------------
+# Serialização dos pesos
+# ------------------------------------------------------------
 def sha256_bytes(b: bytes) -> str:
-    h = hashlib.sha256(); h.update(b); return h.digest().hex()
+    h = hashlib.sha256()
+    h.update(b)
+    return h.digest().hex()
 
 def sd_to_bytes(sd):
     buf = io.BytesIO()
@@ -84,38 +85,71 @@ def sd_to_bytes(sd):
 def bytes_to_sd(b: bytes, device="cpu"):
     return torch.load(io.BytesIO(b), map_location=device)
 
+# ------------------------------------------------------------
+# Avaliação (Top-1)
+# - Converte inputs para o MESMO dtype do modelo (BF16/FP16/FP32)
+# - Usa autocast moderno (sem FutureWarning)
+# ------------------------------------------------------------
 @torch.no_grad()
-def evaluate_top1(model: nn.Module, loader, device="cpu"):
+def evaluate_top1(model, loader, device):
     model.eval()
-    correct = 0
-    total = 0
+    correct, total = 0, 0
+    use_amp = (device != "cpu")
+    target_dtype = next(model.parameters()).dtype  # p.ex. torch.bfloat16 no H100
+
     for x, y in loader:
-        x, y = x.to(device), y.to(device)
-        logits = model(x)[:, :10].float()
-        pred = logits.argmax(dim=1)
-        correct += (pred == y).sum().item()
-        total += y.numel()
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
+
+        # inputs no mesmo dtype do modelo (evita "Input type vs weight type")
+        if use_amp:
+            x = x.to(dtype=target_dtype)
+
+        with amp.autocast("cuda", enabled=use_amp, dtype=target_dtype):
+            logits = model(x)              # [B, 128]
+            # Se seu classificador usa só [:10] em outro lugar, mantenha aqui inteiro.
+            preds = logits.float().argmax(1)  # argmax em FP32
+        correct += (preds == y).sum().item()
+        total   += y.size(0)
+
     return correct / max(1, total)
 
-def train_locally(model: nn.Module, train_loader, steps: int = 200, device="cpu"):
-    model.to(device)
+# ------------------------------------------------------------
+# Treino local
+# - Converte inputs para dtype do modelo
+# - Autocast moderno
+# - Loss em FP32 (estável), sem GradScaler para BF16
+# ------------------------------------------------------------
+def train_locally(model, loader, steps, device):
     model.train()
-    opt = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
-    crit = torch.nn.CrossEntropyLoss()
+    opt = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+    crit = nn.CrossEntropyLoss()
+
+    use_amp = (device != "cpu")
+    target_dtype = next(model.parameters()).dtype
     seen = 0
-    it = iter(train_loader)
-    for i in range(steps):
+
+    it = iter(loader)
+    for _ in range(steps):
         try:
             x, y = next(it)
         except StopIteration:
-            it = iter(train_loader)
+            it = iter(loader)
             x, y = next(it)
-        x, y = x.to(device), y.to(device)
-        opt.zero_grad()
-        loss = crit(model(x), y)
+
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
+
+        if use_amp:
+            x = x.to(dtype=target_dtype)
+
+        opt.zero_grad(set_to_none=True)
+        with amp.autocast("cuda", enabled=use_amp, dtype=target_dtype):
+            logits = model(x)
+            loss = crit(logits.float(), y)  # perda em FP32
+
         loss.backward()
         opt.step()
         seen += x.size(0)
-        if (i+1) % 20 == 0:
-            print(f"[train] step {i+1}/{steps} loss={loss.item():.4f} seen={seen}")
+
     return model, seen
