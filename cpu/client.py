@@ -24,7 +24,7 @@ OPTIONS = [
 
 @ray.remote(num_gpus=0) # Share GPU among clients
 class FLClientActor:
-    def __init__(self, client_id, data_indices, server_address, epochs, batch_size):
+    def __init__(self, client_id, data_indices, server_address, epochs, batch_size, no_sparsity=False):
         self.client_id = client_id
         self.server_address = server_address
         self.epochs = epochs
@@ -58,10 +58,11 @@ class FLClientActor:
         self.model.fc = nn.Linear(512, 10)
         
         # CRITICAL: Apply sparsity hooks to create buffers
-        for name, module in self.model.named_modules():
-             if isinstance(module, (nn.Conv2d, nn.Linear)):
-                if module.weight.numel() % 4 == 0:
-                    apply_2_4_sparsity(module)
+        if not no_sparsity:
+            for name, module in self.model.named_modules():
+                 if isinstance(module, (nn.Conv2d, nn.Linear)):
+                    if module.weight.numel() % 4 == 0:
+                        apply_2_4_sparsity(module)
         
         self.model.to(self.device)
 
@@ -149,6 +150,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--server", type=str, default="localhost:50051")
+    parser.add_argument('--no-sparsity', type=bool, default=False, help='If set to True, do not apply sparsity.')
     args = parser.parse_args()
 
     ray.init()
@@ -174,7 +176,8 @@ def main():
             data_indices=client_data_splits[i],
             server_address=args.server,
             epochs=args.epochs,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            no_sparsity=args.no_sparsity
         )
         clients.append(c)
 

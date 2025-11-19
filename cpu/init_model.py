@@ -3,30 +3,56 @@ import torchvision.models as models
 import torch.nn as nn
 import os
 from sparsity import apply_2_4_sparsity
+import argparse
 
 def main():
-    print("[1/3] Loading ResNet18...")
-    model = models.resnet18(pretrained=False)
-    # Adjust for CIFAR-10 (smaller images)
+    parse = argparse.ArgumentParser(description="Initialize and prune a ResNet18 model with 2:4 sparsity.")
+    parse.add_argument('--no-sparsity', type=bool, default=False, help='If set to True, do not apply sparsity.')
+    args = parse.parse_args()
+
+    print("[1/3] Loading Pretrained ResNet18 Backbone...")
+    base = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+
+    # New CIFAR model
+    model = models.resnet18(weights=None)
+
+    # Modify layers for CIFAR
     model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
     model.maxpool = nn.Identity()
     model.fc = nn.Linear(512, 10)
 
-    print("[2/3] Applying 2:4 Sparsity (Offline)...")
-    # Apply pruning to valid layers
-    for name, module in model.named_modules():
-        if isinstance(module, (nn.Conv2d, nn.Linear)):
-            # 2:4 requires size divisible by 4
-            if module.weight.numel() % 4 == 0:
-                apply_2_4_sparsity(module)
-                print(f"   -> Pruned: {name} | Shape: {module.weight.shape}")
+    # Load pretrained weights except incompatible layers
+    state = base.state_dict()
 
-    print("[3/3] Saving Pruned Model...")
-    # We save the state_dict. This contains 'weight_orig' and 'weight_mask'.
-    # This mask is now PERMANENT for the lifecycle of the FL experiment.
+    # Remove keys that won't match
+    remove_keys = ["conv1.weight", "fc.weight", "fc.bias"]
+    for k in remove_keys:
+        if k in state:
+            del state[k]
+
+    print("Loading pretrained backbone...")
+    model.load_state_dict(state, strict=False)
+
+    if not args.no_sparsity:
+        print("[2/3] Applying 2:4 Sparsity (Offline)...")
+
+        for name, module in model.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                
+                # basic check
+                if module.weight.numel() % 4 == 0:
+                    apply_2_4_sparsity(module)
+                    print(f"   → Pruned: {name:20s} | Shape: {tuple(module.weight.shape)}")
+
+    print("[3/3] Saving Initial Model...")
     os.makedirs("models", exist_ok=True)
-    torch.save(model.state_dict(), "models/initial_sparse_model.pt")
-    print("Done. Model saved to 'models/initial_sparse_model.pt'")
+
+    file_path = "models/initial_sparse_model.pt" if not args.no_sparsity \
+                else "models/initial_dense_model.pt"
+
+    torch.save(model.state_dict(), file_path)
+
+    print(f"Done. Model saved to {file_path}")
 
 if __name__ == "__main__":
     main()

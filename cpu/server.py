@@ -9,6 +9,7 @@ import os
 import time
 import threading
 from sparsity import TwoFourSparsifier # Needed for pickle to recognize class
+import argparse
 
 import torch
 # Max message size (100MB) to handle model weights
@@ -108,9 +109,16 @@ def serve():
         file_name = f"results{counter}.csv"
         counter += 1
 
+
+    parse = argparse.ArgumentParser(description="Initialize and prune a ResNet18 model with 2:4 sparsity.")
+    parse.add_argument('--no-sparsity', type=bool, default=False, help='If set to True, do not apply sparsity.')
+    args = parse.parse_args()
+
+    model_path = "models/initial_sparse_model.pt" if not args.no_sparsity \
+                else "models/initial_dense_model.pt"
     # Hardcoded configuration for demo; ideally args
     fl_pb2_grpc.add_FederatedServiceServicer_to_server(
-        FLServiceImpl("models/initial_sparse_model.pt", num_clients_per_round=4, output_csv=file_name), 
+        FLServiceImpl(model_path, num_clients_per_round=4, output_csv=file_name), 
         server
     )
     server.add_insecure_port('[::]:50051')
