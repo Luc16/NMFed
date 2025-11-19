@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package fl;
+
+service FederatedService {
+  // Client requests the current global model (and current round info)
+  rpc GetGlobalModel (Empty) returns (ModelPacket);
+  
+  // Client sends their trained update
+  rpc SendUpdate (ModelUpdate) returns (Ack);
+}
+
+message Empty {}
+
+message ModelPacket {
+  bytes data = 1;      // Serialized state_dict
+  int32 round = 2;     // Current round number
+  bool stop = 3;       // Signal to stop training
+}
+
+message ModelUpdate {
+  int32 client_id = 1;
+  int32 round = 2;
+  bytes data = 3;      // Serialized state_dict (weight_orig)
+  int32 num_samples = 4;
+  float train_acc = 5;
+  float test_acc = 6;
+}
+
+message Ack {
+  bool success = 1;
+  string message = 2;
+}
