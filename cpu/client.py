@@ -24,7 +24,7 @@ OPTIONS = [
 
 @ray.remote(num_gpus=0) # Share GPU among clients
 class FLClientActor:
-    def __init__(self, client_id, data_indices, server_address, epochs, batch_size, no_sparsity=False):
+    def __init__(self, client_id, data_indices, server_address, epochs, batch_size, no_sparsity=False, pruning_method='topk'):
         self.client_id = client_id
         self.server_address = server_address
         self.epochs = epochs
@@ -62,7 +62,7 @@ class FLClientActor:
             for name, module in self.model.named_modules():
                  if isinstance(module, (nn.Conv2d, nn.Linear)):
                     if module.weight.numel() % 4 == 0:
-                        apply_2_4_sparsity(module)
+                        apply_2_4_sparsity(module, method=pruning_method)
         
         self.model.to(self.device)
 
@@ -151,6 +151,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--server", type=str, default="localhost:50051")
     parser.add_argument('--no-sparsity', type=bool, default=False, help='If set to True, do not apply sparsity.')
+    parser.add_argument('--method', type=str, default='topk', help='Sparsity method: topk, random, stochastic, grad')
     args = parser.parse_args()
 
     ray.init()
@@ -177,7 +178,8 @@ def main():
             server_address=args.server,
             epochs=args.epochs,
             batch_size=args.batch_size,
-            no_sparsity=args.no_sparsity
+            no_sparsity=args.no_sparsity,
+            pruning_method=args.method
         )
         clients.append(c)
 

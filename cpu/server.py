@@ -112,9 +112,10 @@ def serve():
 
     parse = argparse.ArgumentParser(description="Initialize and prune a ResNet18 model with 2:4 sparsity.")
     parse.add_argument('--no-sparsity', type=bool, default=False, help='If set to True, do not apply sparsity.')
+    parse.add_argument('--method', type=str, default='topk', help='Sparsity method: topk, random, stochastic, grad')
     args = parse.parse_args()
 
-    model_path = "models/initial_sparse_model.pt" if not args.no_sparsity \
+    model_path = f"models/initial_sparse_{args.method}_model.pt" if not args.no_sparsity \
                 else "models/initial_dense_model.pt"
     # Hardcoded configuration for demo; ideally args
     fl_pb2_grpc.add_FederatedServiceServicer_to_server(
