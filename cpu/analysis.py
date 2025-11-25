@@ -4,7 +4,7 @@ import io
 
 # Load the provided data
 
-def plot_avg_accuracy(csv_files):
+def plot_avg_accuracy(csv_files, file_name=""):
     """Plots the average train and test accuracy per round for multiple CSV files."""
     plt.figure(figsize=(12, 6))
     colors = ['blue', 'orange', 'green', 'red', 'purple'] # Add more colors if needed
@@ -27,6 +27,8 @@ def plot_avg_accuracy(csv_files):
     plt.ylabel('Accuracy')
     plt.legend()
     plt.grid(True)
+    if file_name:
+        plt.savefig(file_name, dpi=300)
     plt.show()
 
 def plot_client_accuracy(csv_file):
@@ -38,7 +40,7 @@ def plot_client_accuracy(csv_file):
 
     unique_clients = df['Client_ID'].unique()
 
-    colors = plt.cm.get_cmap('tab10', len(unique_clients))
+    colors = plt.get_cmap(None, len(unique_clients))
     
     # Plot Training Accuracy
     plt.figure(figsize=(12, 6))
@@ -53,6 +55,7 @@ def plot_client_accuracy(csv_file):
     plt.ylabel('Training Accuracy')
     plt.legend()
     plt.grid(True)
+    plt.savefig('client_accuracy.pdf', dpi=300)
     plt.show()
 
 
@@ -61,8 +64,19 @@ def plot_client_accuracy(csv_file):
 def main():
     csv_sparse = "results_sparse_20_rounds.csv"
     csv_dense = "results_dense_20_rounds.csv"
-    plot_avg_accuracy([csv_sparse, csv_dense]) 
+    csv_2_sparse = "results_sparse_2_clients_16_rounds.csv"
+    csv_4_sparse = "results_sparse_4_clients_16_rounds.csv"
+    csv_8_sparse = "results_sparse_8_clients_16_rounds.csv"
+
+    csv_topk = "results_sparse_topk.csv"
+    csv_random = "results_sparse_random.csv"
+    csv_stochastic = "results_sparse_stochastic.csv"
+
+
+    plot_avg_accuracy([csv_sparse, csv_dense], file_name="avg_accuracy_sparse_vs_dense.pdf") 
     plot_client_accuracy(csv_sparse)
+    plot_avg_accuracy([csv_2_sparse, csv_4_sparse, csv_8_sparse], file_name="avg_accuracy_varying_clients.pdf")
+    plot_avg_accuracy([csv_topk, csv_random, csv_stochastic], file_name="avg_accuracy_sparsity_methods.pdf")
 
 if __name__ == "__main__":
     main()
