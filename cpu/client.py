@@ -57,7 +57,7 @@ class FLClientActor:
         self.model.maxpool = nn.Identity()
         self.model.fc = nn.Linear(512, 10)
         
-        # CRITICAL: Apply sparsity hooks to create buffers
+        # CRITICAL: Apply sparsity hooks to create buffers (this will be overwritten by the server model)
         if not no_sparsity:
             for name, module in self.model.named_modules():
                  if isinstance(module, (nn.Conv2d, nn.Linear)):
