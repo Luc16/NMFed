@@ -14,7 +14,7 @@ def main():
     method = args.method
 
     print("[1/3] Loading Pretrained ResNet18 Backbone...")
-    base = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+    base = models.resnet18(weights=None)
 
     # New CIFAR model
     model = models.resnet18(weights=None)
@@ -50,8 +50,8 @@ def main():
     print("[3/3] Saving Initial Model...")
     os.makedirs("models", exist_ok=True)
 
-    file_path = f"models/initial_sparse_{method}_model.pt" if not args.no_sparsity \
-                else "models/initial_dense_model.pt"
+    file_path = f"models/initial_sparse_none_{method}_model.pt" if not args.no_sparsity \
+                else "models/initial_dense_none_model.pt"
 
     torch.save(model.state_dict(), file_path)
 

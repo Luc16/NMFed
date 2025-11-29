@@ -116,7 +116,7 @@ def serve():
     args = parse.parse_args()
 
     model_path = f"models/initial_sparse_{args.method}_model.pt" if not args.no_sparsity \
-                else "models/initial_dense_model.pt"
+                else "models/initial_dense_none_model.pt"
     # Hardcoded configuration for demo; ideally args
     fl_pb2_grpc.add_FederatedServiceServicer_to_server(
         FLServiceImpl(model_path, num_clients_per_round=4, output_csv=file_name), 

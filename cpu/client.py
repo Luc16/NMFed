@@ -154,7 +154,7 @@ def main():
     parser.add_argument('--method', type=str, default='topk', help='Sparsity method: topk, random, stochastic, grad')
     args = parser.parse_args()
 
-    ray.init()
+    ray.init(_temp_dir="/dev/shm/ray_tmp")
 
     # FIX: Download Data Once in Main Driver
     print("Downloading CIFAR-10 dataset once...")

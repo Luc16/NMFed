@@ -72,11 +72,15 @@ def main():
     csv_random = "results_sparse_random.csv"
     csv_stochastic = "results_sparse_stochastic.csv"
 
+    csv_none_sparse = "results_sparse_none_16_rounds.csv"
+    csv_none_dense = "results_dense_none_16_rounds.csv"
 
-    plot_avg_accuracy([csv_sparse, csv_dense], file_name="avg_accuracy_sparse_vs_dense.pdf") 
-    plot_client_accuracy(csv_sparse)
-    plot_avg_accuracy([csv_2_sparse, csv_4_sparse, csv_8_sparse], file_name="avg_accuracy_varying_clients.pdf")
-    plot_avg_accuracy([csv_topk, csv_random, csv_stochastic], file_name="avg_accuracy_sparsity_methods.pdf")
+
+    plot_avg_accuracy([csv_none_sparse, csv_none_dense], file_name="treste.pdf") 
+    # plot_avg_accuracy([csv_sparse, csv_dense], file_name="avg_accuracy_sparse_vs_dense.pdf") 
+    # plot_client_accuracy(csv_sparse)
+    # plot_avg_accuracy([csv_2_sparse, csv_4_sparse, csv_8_sparse], file_name="avg_accuracy_varying_clients.pdf")
+    # plot_avg_accuracy([csv_topk, csv_random, csv_stochastic], file_name="avg_accuracy_sparsity_methods.pdf")
 
 if __name__ == "__main__":
     main()
